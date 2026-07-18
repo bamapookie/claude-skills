@@ -42,7 +42,7 @@ def load_events(args):
     tdir = Path(args.timelines) if args.timelines else None
     if tdir and tdir.exists():
         for p in tdir.rglob("*.timeline.jsonl"):
-            for line in p.open(errors="replace"):
+            for line in p.open(encoding="utf-8", errors="replace"):
                 line = line.strip()
                 if not line:
                     continue
@@ -57,7 +57,7 @@ def load_events(args):
                         continue
         for p in list(tdir.rglob("session-timeline.csv")) + list(tdir.rglob("session-timeline.csv.gz")):
             opener = gzip.open if p.suffix == ".gz" else open
-            with opener(p, "rt") as f:
+            with opener(p, "rt", encoding="utf-8", errors="replace") as f:
                 for r in csv.DictReader(f):
                     try:
                         tx.append(parse_ts(r["timestamp"]))
