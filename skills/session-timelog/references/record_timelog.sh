@@ -12,7 +12,7 @@ SAN="$(printf '%s' "$REPO_ROOT" | sed 's/[^a-zA-Z0-9]/-/g')"
 PROJ_DIR="$HOME/.claude/projects/$SAN"
 [ -d "$PROJ_DIR" ] || { echo "ERROR: no transcript dir at $PROJ_DIR" >&2; exit 1; }
 
-MAIN="$(ls -t "$PROJ_DIR"/*.jsonl 2>/dev/null | head -1)"
+MAIN="$(ls -t "$PROJ_DIR"/*.jsonl 2>/dev/null | head -1 || true)"
 [ -n "$MAIN" ] || { echo "ERROR: no main transcript found in $PROJ_DIR" >&2; exit 1; }
 SID="$(basename "$MAIN" .jsonl)"
 SID8="${SID:0:8}"
@@ -71,11 +71,17 @@ fi
     echo "no changes since last snapshot — nothing to commit"
   else
     git commit --quiet -m "timelog: session $SID8 snapshot $(date -u +%Y-%m-%dT%H:%MZ) ($N events)"
+    pushed=0
     for delay in 0 2 4 8 16; do
       sleep "$delay"
-      git push -u "$REMOTE" "$BRANCH" && break
+      if git push -u "$REMOTE" "$BRANCH"; then pushed=1; break; fi
     done
+    if [ "$pushed" -ne 1 ]; then
+      echo "ERROR: push to $REMOTE/$BRANCH failed after all retries — timeline NOT recorded" >&2
+      exit 1
+    fi
   fi
-)
+) || PUSH_FAILED=1
 git worktree remove --force "$WT"
+[ -z "${PUSH_FAILED:-}" ] || exit 1
 echo "done: timelines on branch $BRANCH (no PR — consumed by the time-report skill)"

@@ -62,7 +62,7 @@ finding):
   per-file hours.
 - **Disclose the conventions**: label every table with its bucketing timezone; omitted dates are zero-activity, not data
   gaps; mark the final week partial with the dataset end (in both local and UTC terms when the timesheet uses local
-  time); a block ending exactly at `00:00` continues on the next row; displayed block starts include the lead-in, so
+  time); a block crossing midnight splits at the boundary (the prior row ends `00:00` and it continues on the next row), while a block that *ends* exactly at midnight is credited wholly to the prior day; displayed block starts include the lead-in, so
   visible gaps read shorter than the underlying silence; week/grand totals use unrounded durations and may not equal the
   sum of rounded day figures; headline numbers carry the same precision as the tables they summarize.
 - **State coverage**: which days have timeline coverage versus git/GitHub signal only (those undercount), and that

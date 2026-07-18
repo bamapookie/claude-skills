@@ -29,7 +29,12 @@ def parse_ts(ts):
     ts = ts.strip()
     if ts.endswith("Z"):
         ts = ts[:-1] + "+00:00"
-    return datetime.fromisoformat(ts).astimezone(timezone.utc)
+    dt = datetime.fromisoformat(ts)
+    if dt.tzinfo is None:
+        # An offset-less timestamp is treated as UTC. (astimezone on a naive datetime would
+        # silently assume the machine's local zone — host-dependent, worse than an error.)
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
 
 
 def load_events(args):
@@ -46,12 +51,18 @@ def load_events(args):
                 except json.JSONDecodeError:
                     continue
                 if isinstance(o, dict) and o.get("timestamp"):
-                    tx.append(parse_ts(o["timestamp"]))
+                    try:
+                        tx.append(parse_ts(o["timestamp"]))
+                    except ValueError:
+                        continue
         for p in list(tdir.rglob("session-timeline.csv")) + list(tdir.rglob("session-timeline.csv.gz")):
             opener = gzip.open if p.suffix == ".gz" else open
             with opener(p, "rt") as f:
                 for r in csv.DictReader(f):
-                    tx.append(parse_ts(r["timestamp"]))
+                    try:
+                        tx.append(parse_ts(r["timestamp"]))
+                    except (ValueError, KeyError, TypeError):
+                        continue
     if args.commits:
         for line in open(args.commits, encoding="utf-8", errors="replace"):
             parts = line.rstrip("\n").split("|")
@@ -106,7 +117,8 @@ def split_by_day(bs, tz):
             nxt = datetime.combine(s.date() + timedelta(days=1), time(0), tzinfo=tz)
             db[s.date()].append((s, nxt))
             s = nxt
-        db[s.date()].append((s, e))
+        if s < e:  # an end of exactly midnight belongs wholly to the prior day: no zero-length tail
+            db[s.date()].append((s, e))
     return db
 
 
@@ -218,8 +230,9 @@ def main():
         f"All times **{args.tz}**. One row per work block: a stretch of activity with no",
         f"silence longer than {args.gap_window:g} minutes between events. Displayed block starts include",
         f"a {args.lead_window:g}-minute lead-in, so visible gaps read {args.lead_window:g} minutes shorter than the",
-        "underlying silence. Blocks crossing local midnight split at the boundary — an end",
-        "of exactly `00:00` continues on the next row. **Active** excludes gaps over",
+        "underlying silence. Blocks crossing local midnight split at the boundary — the prior",
+        "row ends `00:00` and the block continues on the next row; a block that *ends* exactly",
+        "at midnight is credited wholly to the prior day. **Active** excludes gaps over",
         f"{args.gap_active:g} minutes, so it is ≤ the block-window sum. Dates with no events are omitted",
         "(zero-activity days). Week and grand totals use unrounded durations and may not",
         "equal the sum of rounded day figures.",
